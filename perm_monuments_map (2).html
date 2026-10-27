@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Сохраняем вместе. История города Перми в лицах и событиях</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Segoe UI', 'PT Sans', Tahoma, Arial, sans-serif;
+    background: #FAF6EF; color: #3E3A34; min-height: 100vh;
+  }
+  header {
+    background: linear-gradient(120deg, #F4E9C8 0%, #FAF6EF 45%, #D9E9E1 100%);
+    padding: 26px 24px 20px;
+    border-bottom: 1px solid #E8E0D0;
+  }
+  header h1 { font-size: 26px; font-weight: 700; color: #4A4238; letter-spacing: 0.2px; }
+  header p  { margin-top: 8px; font-size: 14px; color: #8A7F70; }
+  .layout {
+    display: grid; grid-template-columns: 390px 1fr; gap: 16px;
+    padding: 16px 20px 8px; max-width: 1600px; margin: 0 auto;
+  }
+  @media (max-width: 980px) {
+    .layout { grid-template-columns: 1fr; }
+    #map { height: 60vh !important; }
+  }
+  .panel {
+    background: #FFFFFF; border: 1px solid #EDE5D6; border-radius: 16px;
+    padding: 16px; overflow-y: auto; max-height: 80vh;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .chip {
+    border: none; cursor: pointer; font-size: 13px; padding: 7px 14px;
+    border-radius: 999px; background: #F4EFE6; color: #5B5348; transition: all .15s;
+  }
+  .chip.active { background: #4A4238; color: #FFF; }
+  .card {
+    display: flex; gap: 12px; align-items: flex-start; padding: 10px;
+    border-radius: 12px; cursor: pointer; border: 1px solid transparent;
+    transition: background .15s;
+  }
+  .card:hover { background: #FBF8F1; border-color: #EFE6D4; }
+  .card-dot { width: 14px; height: 14px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; border: 2px solid #fff; box-shadow: 0 0 0 1px #ddd; }
+  .card-thumb {
+    width: 58px; height: 58px; border-radius: 10px; flex-shrink: 0; object-fit: cover;
+    background: #F0EAD9; display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: #C8BCA4; overflow: hidden;
+  }
+  .card-body b { display: block; font-size: 14.5px; margin-bottom: 3px; color: #4A4238; }
+  .card-body span { font-size: 12.5px; color: #9A8F7E; line-height: 1.35; display: block; }
+  #map { height: 78vh; min-height: 520px; border-radius: 16px; border: 1px solid #EDE5D6; background: #EAF0EA; }
+  .leaflet-popup-content { width: 268px !important; font-size: 13px; line-height: 1.45; }
+  .pop-title { font-size: 15px; font-weight: 700; color: #4A4238; margin: 6px 0 6px; }
+  .pop-cat {
+    display: inline-block; font-size: 11px; padding: 3px 10px; border-radius: 999px;
+    color: #FFF; margin-bottom: 6px;
+  }
+  .pop-img { width: 100%; height: 150px; object-fit: cover; border-radius: 10px; display: block; margin-bottom: 4px; }
+  .pop-nophoto {
+    height: 90px; display: flex; align-items: center; justify-content: center;
+    background: #F0EAD9; color: #B4A88F; font-size: 13px; border-radius: 10px; margin-bottom: 4px;
+  }
+  .pop-row { margin: 4px 0; color: #55503F; }
+  .pop-row b { color: #4A4238; }
+  .pop-approx { font-size: 11px; color: #B4A88F; font-style: italic; margin-top: 6px; }
+  .pop-link {
+    display: inline-block; margin-top: 10px; font-size: 12.5px; color: #4F7FB8;
+    text-decoration: none; border-bottom: 1px dashed #9FBFDA;
+  }
+  .map-note { font-size: 12px; color: #A79C8B; padding: 4px 22px 18px; max-width: 1600px; margin: 0 auto; }
+  footer { text-align: center; padding: 22px; font-size: 13px; color: #A79C8B; border-top: 1px solid #EDE5D6; margin-top: 10px; }
+  .no-leaflet { padding: 40px; text-align: center; color: #8A7F70; font-size: 15px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Сохраняем вместе. История города Перми в лицах и событиях</h1>
+  <p>Нажмите на точку на карте или карточку в списке — откроется историческая справка с фотографией</p>
+</header>
+
+<div class="layout">
+  <div class="panel">
+    <div class="chips" id="chips"></div>
+    <div id="list"></div>
+  </div>
+  <div id="map"></div>
+</div>
+
+<div class="map-note">Координаты части объектов (микрорайоны Кислотные Дачи, Садовый, скверы) — ориентировочные. Фото подгружаются из открытого фотоархива Викисклада; для объектов без фотографии в архиве показывается заглушка.</div>
+
+<footer>Сохраняем вместе. Памятные места города Перми</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+var CATS = {
+  "Основатели":          { dot: "#4F8F74", fill: "#BFE3D0" },
+  "Наука и изобретения": { dot: "#4F7FB8", fill: "#C9DEF2" },
+  "Герои войны":         { dot: "#B05F4F", fill: "#F2C9C0" },
+  "Культура":            { dot: "#7A68B0", fill: "#D9D4EE" },
+  "Город и революция":   { dot: "#A58A3F", fill: "#F4E9C8" }
+};
+
+var DATA = [
+ { name: "Памятник В. Н. Татищеву", cat: "Основатели", lat: 58.0100, lng: 56.2322,
+   person: "Василию Никитичу Татищеву (1686–1750) — основателю Перми, горному начальнику",
+   merits: "Руководил строительством Егошихинского медеплавильного завода — с него началась Пермь. Историк, географ, основатель Екатеринбурга.",
+   set: "11 июня 2003 года, к 280-летию города", author: "скульпторы А. Уральский и С. Тарасов",
+   addr: "сквер имени Татищева (Разгуляй), Ленинский район", pq: "Памятник Татищеву Пермь" },
+
+ { name: "Памятник доктору Ф. Х. Гралю", cat: "Основатели", lat: 58.0055, lng: 56.2068,
+   person: "Фёдору Христофоровичу Гралю (1770–1835) — «народному доктору», основателю пермской медицины",
+   merits: "Губернский врач Перми, инспектор врачебной управы; боролся с эпидемиями, лечил бедняков бесплатно, завещал средства на благотворительность.",
+   set: "11 июня 2005 года, народный проект", author: "скульптор А. Залазаев, архитектор В. Воженников",
+   addr: "ул. Ленина, 92 (угол с ул. Плеханова, у ГКБ № 2 им. Граля)", pq: "Памятник Граалю Пермь" },
+
+ { name: "Памятник А. С. Попову", cat: "Наука и изобретения", lat: 58.0183, lng: 56.2458,
+   person: "Александру Степановичу Попову (1859–1906) — изобретателю радио, уроженцу Пермской губернии",
+   merits: "Создал первый в мире радиоприёмник; преподавал в Пермском университете, где возглавлял физическое отделение.",
+   set: "—", author: "—",
+   addr: "ул. Букирева, 15, перед главным корпусом ПГНИУ", pq: "Памятник Попову Пермь" },
+
+ { name: "Памятник Н. Г. Славянову", cat: "Наука и изобретения", lat: 58.0213, lng: 56.2836,
+   person: "Николаю Гавриловичу Славянову (1854–1897) — инженеру Пермских пушечных заводов",
+   merits: "Изобрёл дуговую сварку металлическим электродом (1888) — основу современной сварки; его метод применяется во всём мире до сих пор.",
+   set: "1988 год", author: "—",
+   addr: "площадь Дружбы, Мотовилихинский район", pq: "Памятник Славянову" },
+
+ { name: "Памятник П. И. Преображенскому", cat: "Наука и изобретения", lat: 58.0218, lng: 56.2642,
+   person: "Павлу Ивановичу Преображенскому (1874–1944) — геологу, первооткрывателю уральских богатств",
+   merits: "Открыл Верхнекамское месторождение калийных солей (1925) и первую уральскую нефть (1929) — два богатства, на которых стоит экономика края.",
+   set: "—", author: "—",
+   addr: "ул. Сибирская, 60, у здания «ЛУКОЙЛ-Пермь»", pq: "Памятник Преображенскому Пермь" },
+
+ { name: "Памятник С. Г. Суханову", cat: "Наука и изобретения", lat: 58.0377, lng: 56.2496,
+   person: "Сергею Германовичу Суханову — кардиохирургу, основателю пермской школы сердечно-сосудистой хирургии",
+   merits: "Выполнил первые в Прикамье операции на открытом сердце; создал кардиохирургическую службу региона.",
+   set: "2017 год", author: "скульптор А. Матвеев",
+   addr: "ул. Маршала Жукова, 35, у Федерального центра сердечно-сосудистой хирургии", pq: null },
+
+ { name: "Памятник И. В. Королёву", cat: "Герои войны", lat: 58.0272, lng: 56.2700,
+   person: "Ивану Васильевичу Королёву (1907–1941) — генерал-майору, командиру стрелковой дивизии",
+   merits: "Погиб в первые месяцы Великой Отечественной войны, сражаясь за освобождение родной земли.",
+   set: "—", author: "—",
+   addr: "микрорайон Кислотные Дачи, ул. Королёва", approx: true, pq: null },
+
+ { name: "Памятник В. П. Сухареву", cat: "Наука и изобретения", lat: 57.9826, lng: 56.2380,
+   person: "Василию Петровичу Сухареву — нефтянику, почётному гражданину Перми",
+   merits: "Внес большой вклад в развитие пермской нефтепереработки; памятник установлен у предприятия «Пермнефтеоргсинтез».",
+   set: "—", author: "—",
+   addr: "ул. Промышленная, 84, у «Пермнефтеоргсинтеза»", approx: true, pq: null },
+
+ { name: "Памятник В. И. Мясникову", cat: "Герои войны", lat: 57.9680, lng: 56.2260,
+   person: "Василию Михайловичу Мясникову (1906–1945) — Герою Советского Союза",
+   merits: "Командир батальона 179-го гвардейского стрелкового полка; погиб в боях за освобождение Европы в 1945 году.",
+   set: "—", author: "—",
+   addr: "микрорайон Садовый, ул. Мясникова", approx: true, pq: null },
+
+ { name: "Памятник М. Н. Гареву", cat: "Герои войны", lat: 58.0285, lng: 56.2735,
+   person: "Михаилу Николаевичу Гареву (1913–1945) — старшему сержанту, командиру орудия",
+   merits: "Командир орудия 175-го гвардейского стрелкового полка; погиб в 1945 году, символ мужества пермских воинов.",
+   set: "—", author: "—",
+   addr: "микрорайон Кислотные Дачи, ул. Гарева", approx: true, pq: null },
+
+ { name: "Памятник А. И. Кочеткову", cat: "Герои войны", lat: 58.0278, lng: 56.2660,
+   person: "Алексею Ивановичу Кочеткову (1925–1973) — Герою Советского Союза",
+   merits: "Командир отделения; проявил мужество при форсировании Днепра в 1943 году.",
+   set: "—", author: "—",
+   addr: "микрорайон Кислотные Дачи, ул. Кочеткова", approx: true, pq: null },
+
+ { name: "Памятник В. И. Ленину", cat: "Город и революция", lat: 58.0068, lng: 56.2468,
+   person: "Владимиру Ильичу Ленину — вождю Октябрьской революции",
+   merits: "Главный монумент советской эпохи на главной площади города; место парадов и городских событий на протяжении десятилетий.",
+   set: "1954 год", author: "скульптор Г. Нерода",
+   addr: "площадь Ленина, Ленинский район", pq: "Памятник Ленину Пермь" },
+
+ { name: "Памятник Б. Л. Пастернаку", cat: "Культура", lat: 58.0145, lng: 56.2461,
+   person: "Борису Леонидовичу Пастернаку (1890–1960) — поэту, нобелевскому лауреату",
+   merits: "Единственный в России памятник Пастернаку. Пермь стала прообразом города Юрятин в романе «Доктор Живаго».",
+   set: "12 июня 2009 года", author: "скульптор Е. Мунц",
+   addr: "Театральный сквер у театра оперы и балета (Петропавловская, 25А)", pq: "Памятник Пастернаку Пермь" },
+
+ { name: "Памятник С. П. Дягилеву", cat: "Культура", lat: 58.0057, lng: 56.2427,
+   person: "Сергею Павловичу Дягилеву (1872–1929) — импресарио, основателю «Русских сезонов» в Париже",
+   merits: "Прославил русское искусство на весь мир; уроженец Пермской губернии, здесь прошли его детство и юность.",
+   set: "2007 год", author: "скульптор Э. Неизвестный",
+   addr: "у Дома Мешкова (Сибирская, 33), Ленинский район", pq: "Памятник Дягилеву Пермь" },
+
+ { name: "Памятник С. М. Кирову", cat: "Город и революция", lat: 58.0360, lng: 56.1950,
+   person: "Сергею Мироновичу Кирову (1886–1934) — революционеру и государственному деятелю",
+   merits: "Один из старейших монументов города; Киров возглавлял Мотовилихинский завод, давший имя целому району Закамска.",
+   set: "1952 год", author: "—",
+   addr: "ул. Мира, Кировский район (Закамск)", approx: true, pq: "Памятник Кирову Пермь" },
+
+ { name: "Памятник Ю. А. Гагарину", cat: "Культура", lat: 58.0398, lng: 56.2845,
+   person: "Юрию Алексеевичу Гагарину (1934–1968) — первому космонавту планеты",
+   merits: "Бюст установлен к 80-летию со дня рождения космонавта; Пермь связана с космосом через ПГТУ и именные места города.",
+   set: "2 октября 2014 года", author: "—",
+   addr: "сквер им. Гагарина, пересечение ул. Старцева и бульвара Гагарина", approx: true, pq: "Памятник Гагарину Пермь" },
+
+ { name: "Памятник П. Г. Соболевскому", cat: "Наука и изобретения", lat: 58.0048, lng: 56.2420,
+   person: "Петру Григорьевичу Соболевскому (1782–1841) — изобретателю, основоположнику газовой отрасли России",
+   merits: "Запустил первую в России систему газового освещения; композиция включает исторические газовые фонари, как в Александровском саду Петербурга.",
+   set: "30 ноября 2023 года, к 300-летию Перми", author: "инициатор — «Газпром межрегионгаз»",
+   addr: "сад им. Гоголя, Ленинский район", pq: "Памятник Соболевскому Пермь" },
+
+ { name: "Памятник Ю. Н. Калачникову", cat: "Наука и изобретения", lat: 58.0245, lng: 56.2890,
+   person: "Юрию Николаевичу Калачникову (1928–2018) — пермскому конструктору артиллерийских систем",
+   merits: "Под его руководством созданы системы «Ураган», «Смерч», «Тюльпан», «Нона», «Гиацинт» — «Смерч» не имеет аналогов в мире до сих пор.",
+   set: "2023 год", author: "—",
+   addr: "сквер им. Калачникова (ул. Лебедева / Землячки / Уральская)", approx: true, pq: "Калачников Пермь" }
+];
+
+var activeCat = "Все";
+
+function photoSrc(it) {
+  return it.img ? it.img : "";
+}
+function photoBlock(it) {
+  if (it.img) return '<img class="pop-img" src="' + it.img + '" alt="Фото памятника">';
+  return '<div class="pop-nophoto">📷 фото в архиве пока не найдено</div>';
+}
+
+function popupHTML(it) {
+  var approx = it.approx ? '<div class="pop-approx">⚠ координата ориентировочная</div>' : "";
+  var yandex = "https://yandex.ru/maps/?pt=" + it.lng + "," + it.lat + "&z=17&l=map";
+  return photoBlock(it) +
+    '<span class="pop-cat" style="background:' + CATS[it.cat].dot + '">' + it.cat + "</span>" +
+    '<div class="pop-title">' + it.name + "</div>" +
+    '<div class="pop-row"><b>Кому посвящён:</b> ' + it.person + "</div>" +
+    '<div class="pop-row"><b>Заслуги:</b> ' + it.merits + "</div>" +
+    '<div class="pop-row"><b>Установлен:</b> ' + it.set + (it.author && it.author !== "—" ? ", " + it.author : "") + "</div>" +
+    '<div class="pop-row"><b>Адрес:</b> ' + it.addr + "</div>" +
+    approx +
+    '<a class="pop-link" target="_blank" href="' + yandex + '">Построить маршрут в Яндекс.Картах ↗</a>';
+}
+
+function initMap() {
+  var map = L.map("map", { scrollWheelZoom: true }).setView([58.012, 56.244], 12);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a>"
+  }).addTo(map);
+
+  DATA.forEach(function (it, i) {
+    var c = CATS[it.cat];
+    var m = L.circleMarker([it.lat, it.lng], {
+      radius: 10, color: "#FFFFFF", weight: 2,
+      fillColor: c.fill, fillOpacity: 1, opacity: 0.9
+    }).addTo(map);
+    m.bindTooltip(it.name.replace("Памятник ", ""), { direction: "top", offset: [0, -10] });
+    m.bindPopup(function () { return popupHTML(it); });
+    m.on("click", function () { highlightCard(i); });
+    it._marker = m;
+    it._card = buildCard(it, i);
+  });
+
+  buildChips();
+  applyFilter();
+  loadPhotos();
+}
+
+function buildCard(it, i) {
+  var c = CATS[it.cat];
+  var div = document.createElement("div");
+  div.className = "card";
+  div.id = "card_" + i;
+  div.innerHTML =
+    '<div class="card-dot" style="background:' + c.dot + '"></div>' +
+    '<img class="card-thumb" id="thumb_' + i + '" alt="">' +
+    '<div class="card-body"><b>' + it.name.replace("Памятник ", "") + "</b>" +
+    "<span>" + it.addr + "</span>" +
+    '<span style="color:' + c.dot + '">' + it.cat + "</span></div>";
+  div.onclick = function () {
+    map.flyTo([it.lat, it.lng], 17, { duration: 0.8 });
+    setTimeout(function () { it._marker.openPopup(); }, 850);
+  };
+  document.getElementById("list").appendChild(div);
+  updateThumb(i);
+  return div;
+}
+
+function updateThumb(i) {
+  var t = document.getElementById("thumb_" + i);
+  if (!t) return;
+  var it = DATA[i];
+  if (it.img) { t.src = it.img; t.style.objectFit = "cover"; }
+  else { t.removeAttribute("src"); t.style.display = "none"; }
+}
+
+function refreshThumb(i) { updateThumb(i); }
+
+function highlightCard(i) {
+  document.querySelectorAll(".card").forEach(function (el) { el.style.background = ""; });
+  var el = document.getElementById("card_" + i);
+  if (el) { el.style.background = "#FBF3DF"; el.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+}
+
+function buildChips() {
+  var box = document.getElementById("chips");
+  var cats = ["Все"].concat(Object.keys(CATS));
+  cats.forEach(function (name) {
+    var b = document.createElement("button");
+    b.className = "chip" + (name === "Все" ? " active" : "");
+    b.textContent = name;
+    b.onclick = function () {
+      document.querySelectorAll(".chip").forEach(function (el) { el.classList.remove("active"); });
+      b.classList.add("active");
+      activeCat = name;
+      applyFilter();
+    };
+    box.appendChild(b);
+  });
+}
+
+function applyFilter() {
+  DATA.forEach(function (it) {
+    var show = activeCat === "Все" || it.cat === activeCat;
+    if (it._marker) {
+      if (show) { if (!map.hasLayer(it._marker)) it._marker.addTo(map); }
+      else { if (map.hasLayer(it._marker)) map.removeLayer(it._marker); }
+    }
+    if (it._card) it._card.style.display = show ? "" : "none";
+  });
+}
+
+function fetchCommonsPhoto(query) {
+  var url = "https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*" +
+    "&generator=search&gsrnamespace=6&gsrlimit=3&prop=imageinfo&iiprop=url&iiurlwidth=480&gsrsearch=" +
+    encodeURIComponent(query);
+  return fetch(url)
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j.query || !j.query.pages) return null;
+      var pages = Object.values(j.query.pages);
+      for (var k = 0; k < pages.length; k++) {
+        var p = pages[k];
+        if (p.imageinfo && p.imageinfo[0] && p.imageinfo[0].thumburl) {
+          var u = p.imageinfo[0].thumburl;
+          if (/\.(jpe?g|png)$/i.test(p.title)) return u;
+        }
+      }
+      return pages.length && pages[0].imageinfo && pages[0].imageinfo[0] ? pages[0].imageinfo[0].thumburl : null;
+    })
+    .catch(function () { return null; });
+}
+
+function loadPhotos() {
+  DATA.forEach(function (it, i) {
+    if (!it.pq) return;
+    fetchCommonsPhoto(it.pq).then(function (u) {
+      if (u) { it.img = u; refreshThumb(i); }
+    });
+  });
+}
+
+if (typeof L === "undefined") {
+  document.getElementById("map").innerHTML =
+    '<div class="no-leaflet">Не удалось загрузить карту.<br>Проверьте подключение к интернету и обновите страницу — карта и фотографии берутся из открытых онлайн-источников.</div>';
+} else {
+  initMap();
+}
+</script>
+</body>
+</html>
